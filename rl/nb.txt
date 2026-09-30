@@ -1,0 +1,7 @@
+git+https://github.com/Dao-AILab/fast-hadamard-transform.git
+git+https://github.com/Dao-AILab/flash-attention.git
+git+https://github.com/state-spaces/mamba.git
+git+https://github.com/NVIDIA/nvidia-resiliency-ext.git
+megatron-bridge
+transformer_engine[pytorch]
+https://github.com/NVIDIA/apex.git 
