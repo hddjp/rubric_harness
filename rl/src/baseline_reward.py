@@ -113,6 +113,9 @@ def _get_rubric(data_source: str, question: str) -> list[dict]:
 
 def compute_score(data_source, solution_str, ground_truth, extra_info=None):
     """Judge one response against the matching released baseline rubric."""
+    if data_source == "gpqa_diamond":
+        from heldout_reward import gpqa_score
+        return gpqa_score(solution_str, ground_truth)
     started = time.perf_counter()
     info = extra_info or {}
     question = info.get("question")
@@ -123,19 +126,26 @@ def compute_score(data_source, solution_str, ground_truth, extra_info=None):
             raise ValueError(f"unsupported data_source: {data_source!r}")
         if not isinstance(question, str) or not question:
             raise ValueError("extra_info.question is missing")
-        rubric = _get_rubric(data_source, question)
+        if info.get("split") == "train":
+            rubric = _get_rubric(data_source, question)
+        else:
+            # Validation: most val questions have no generated rubric, so every
+            # arm is scored with the shipped rubric to share one yardstick.
+            rubric = info.get("rubrics")
+            if not isinstance(rubric, list) or not rubric:
+                raise ValueError("no shipped rubric for validation row")
         score, result, verdicts = _judge_baseline(
             question, solution_str, rubric, info, weighting_mode=WEIGHTING_MODE
         )
         result = dict(result)
         result["baseline_verdicts"] = verdicts
-        reward = {"score": score, "rating": None, "judge_error": ""}
+        reward = {"score": score, "judge_failed": 0.0, "judge_error": ""}
     except Exception as exc:
         _write_error(
             f"baseline reward failed for data_source={data_source!r}, index={info.get('index')!r}",
             exc,
         )
-        reward = {"score": 0.0, "rating": 0, "judge_error": str(exc)}
+        reward = {"score": 0.0, "judge_failed": 1.0, "judge_error": str(exc)}
 
     _write_reward_time(started)
     _write_reward_log(

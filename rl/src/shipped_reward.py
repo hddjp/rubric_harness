@@ -11,6 +11,8 @@ import threading
 import time
 import urllib.error
 import urllib.request
+import http.client
+import zlib
 from pathlib import Path
 
 SRC_DIR = Path(__file__).resolve().parent
@@ -21,11 +23,14 @@ for path in (SRC_DIR, REPO_ROOT):
 
 from harness.schema import Criterion, Polarity  # noqa: E402
 
-JUDGE_BASE_URL = "http://10.176.56.53:8000/v1"
+JUDGE_BASE_URL = "http://127.0.0.1:8000/v1"
+# Comma-separated replicas (rl/serve_judge_dp.sh serves ports 8000-8003).
+JUDGE_BASE_URLS = [u.strip() for u in os.environ.get("JUDGE_BASE_URLS", JUDGE_BASE_URL).split(",") if u.strip()]
+JUDGE_OUTAGE_SECONDS = float(os.environ.get("JUDGE_OUTAGE_SECONDS", "900"))
 JUDGE_MODEL = "Qwen/Qwen3.8-27B"
-JUDGE_TIMEOUT_SECONDS = 2000.0
+JUDGE_TIMEOUT_SECONDS = float(os.environ.get("JUDGE_TIMEOUT_SECONDS", "2000"))
 JUDGE_MAX_RETRIES = 2
-JUDGE_MAX_CONCURRENT = 8
+JUDGE_MAX_CONCURRENT = int(os.environ.get("JUDGE_MAX_CONCURRENT", "8"))
 BASELINE_JUDGE_MAX_TOKENS = 8192 #12288
 # Select how criterion weights are aggregated into the reward.  This can be
 # overridden at launch with RUBRIC_WEIGHTING=raw_weight.
@@ -224,7 +229,7 @@ def _write_reward_log(*, question, model_output, rubrics, judge_response, reward
         "model_output": _jsonable(model_output),
         "rubrics": _jsonable(rubrics),
         "verifier_score": _jsonable(reward_result.get("score")),
-        "verifier_rating": _jsonable(reward_result.get("rating")),
+        "verifier_judge_failed": _jsonable(reward_result.get("judge_failed")),
         "verifier_output": _judge_content(judge_response),
     }
     if reward_result.get("judge_error"):
@@ -272,15 +277,25 @@ def _judge_baseline(
         "temperature": 0,
         "max_tokens": BASELINE_JUDGE_MAX_TOKENS,
     }).encode("utf-8")
-    request = urllib.request.Request(
-        f"{JUDGE_BASE_URL.rstrip('/')}/chat/completions",
-        data=body,
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
-    request_payload = _request_payload(request)
+    # Spread requests over the judge replicas; on an outage (connection refused,
+    # 5xx, timeout) move to the next replica and keep retrying for up to
+    # JUDGE_OUTAGE_SECONDS, so a judge restart delays rewards instead of
+    # silently turning them into 0. Bad outputs still get JUDGE_MAX_RETRIES.
+    first = zlib.crc32(f"{question}:{info.get('index', '')}:{solution[:64]}".encode()) % len(JUDGE_BASE_URLS)
+    deadline = time.monotonic() + JUDGE_OUTAGE_SECONDS
     last_error = None
-    for attempt in range(JUDGE_MAX_RETRIES + 1):
+    bad_outputs = 0
+    attempt = 0
+    while True:
+        base = JUDGE_BASE_URLS[(first + attempt) % len(JUDGE_BASE_URLS)]
+        attempt += 1
+        request = urllib.request.Request(
+            f"{base.rstrip('/')}/chat/completions",
+            data=body,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        request_payload = _request_payload(request)
         raw_response = None
         try:
             with _JUDGE_SEMAPHORE:
@@ -296,7 +311,19 @@ def _judge_baseline(
                 "response": raw_response.decode("utf-8", errors="replace"),
             })
             return _explicit_score(shown, ordered, weighting_mode), result, verdicts
-        except (TimeoutError, urllib.error.URLError, KeyError, IndexError, TypeError, ValueError) as exc:
+        except urllib.error.HTTPError as exc:
+            last_error = exc
+            if exc.code < 500:  # e.g. 400 prompt longer than the context: not retryable
+                break
+            if time.monotonic() >= deadline:
+                break
+            time.sleep(min(2 ** min(attempt, 5), 30))
+        except (TimeoutError, urllib.error.URLError, ConnectionError, http.client.HTTPException) as exc:
+            last_error = exc
+            if time.monotonic() >= deadline:
+                break
+            time.sleep(min(2 ** min(attempt, 5), 30))
+        except (KeyError, IndexError, TypeError, ValueError) as exc:
             last_error = exc
             _write_model_log({
                 "request": request_payload["body"],
@@ -305,13 +332,18 @@ def _judge_baseline(
                     if isinstance(raw_response, bytes) else None
                 ),
             })
-            if attempt < JUDGE_MAX_RETRIES:
-                time.sleep(min(2**attempt, 8))
-    raise RuntimeError(f"baseline judge failed after {JUDGE_MAX_RETRIES + 1} attempt(s): {last_error}")
+            bad_outputs += 1
+            if bad_outputs > JUDGE_MAX_RETRIES:
+                break
+            time.sleep(min(2 ** bad_outputs, 8))
+    raise RuntimeError(f"baseline judge failed after {attempt} attempt(s): {last_error}")
 
 
 def compute_score(data_source, solution_str, ground_truth, extra_info=None):
     """Score one response against the shipped rubric stored in VERL data."""
+    if data_source == "gpqa_diamond":
+        from heldout_reward import gpqa_score
+        return gpqa_score(solution_str, ground_truth)
     if data_source not in {"rar_medicine", "rar_science"}:
         raise ValueError(f"unsupported data_source: {data_source!r}")
     info = extra_info or {}
@@ -326,10 +358,10 @@ def compute_score(data_source, solution_str, ground_truth, extra_info=None):
         )
         result = dict(result)
         result["baseline_verdicts"] = verdicts
-        reward_result = {"score": score, "rating": None, "judge_error": ""}
+        reward_result = {"score": score, "judge_failed": 0.0, "judge_error": ""}
     except (RuntimeError, ValueError, TypeError, KeyError, IndexError) as exc:
         result = None
-        reward_result = {"score": 0.0, "rating": 0, "judge_error": str(exc)}
+        reward_result = {"score": 0.0, "judge_failed": 1.0, "judge_error": str(exc)}
     _write_reward_log(
         question=question,
         model_output=solution_str,

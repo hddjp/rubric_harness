@@ -1,0 +1,193 @@
+<title>RaR Rubric RL Runs</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: summary strip (run progress) first, then one section per domain with a grid of small line charts. */
+:root {
+  --bg: #f7f8f9; --panel: #ffffff; --ink: #14171a; --ink-2: #4d555d; --muted: #7c858e;
+  --rule: #e2e6ea; --grid: #edf0f2;
+  --agentic: #2a78d6; --baseline: #eb6834; --shipped: #1baf7a;
+  --warn: #b26b00; --good: #1f7a3a;
+  --sans: "Public Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #121417; --panel: #1a1d21; --ink: #f2f4f6; --ink-2: #b9c0c7; --muted: #8a939c;
+  --rule: #2c3137; --grid: #23272c; --agentic: #3987e5; --baseline: #d95926; --shipped: #199e70;
+  --warn: #e0a040; --good: #4cbf6c; color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --bg: #121417; --panel: #1a1d21; --ink: #f2f4f6; --ink-2: #b9c0c7; --muted: #8a939c;
+  --rule: #2c3137; --grid: #23272c; --agentic: #3987e5; --baseline: #d95926; --shipped: #199e70;
+  --warn: #e0a040; --good: #4cbf6c; color-scheme: dark; }
+body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 14px; line-height: 1.5; }
+.wrap { max-width: 1120px; margin: 0 auto; padding-inline: 16px; padding-block: 28px 48px; display: grid; gap: 28px; }
+header { display: grid; gap: 4px; }
+h1 { font-size: 24px; font-weight: 700; margin: 0; letter-spacing: -0.01em; text-wrap: balance; }
+h2 { font-size: 17px; font-weight: 650; margin: 0; text-wrap: balance; }
+.meta { color: var(--ink-2); font-size: 13px; }
+.mono, .num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.runs { display: grid; gap: 8px; background: var(--panel); border: 1px solid var(--rule); border-radius: 10px; padding: 14px 16px; }
+.run { display: grid; grid-template-columns: 14px minmax(140px, 180px) minmax(0, 1fr) auto; gap: 12px; align-items: center; }
+.swatch { width: 10px; height: 10px; border-radius: 3px; }
+.run-name { font-weight: 600; }
+.track { height: 8px; background: var(--grid); border-radius: 4px; overflow: hidden; }
+.fill { height: 100%; border-radius: 4px; }
+.run-stat { font-size: 12.5px; color: var(--ink-2); white-space: nowrap; min-width: 30ch; text-align: right; }
+.chip { display: inline-block; font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; padding: 1px 7px; border-radius: 999px; border: 1px solid currentColor; margin-left: 6px; }
+.chip.warn { color: var(--warn); } .chip.good { color: var(--good); }
+section { display: grid; gap: 14px; }
+.section-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 8px; }
+.legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 12.5px; color: var(--ink-2); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 14px; }
+.card { background: var(--panel); border: 1px solid var(--rule); border-radius: 10px; padding: 12px 14px 8px; min-width: 0; position: relative; }
+.card h3 { margin: 0; font-size: 13.5px; font-weight: 600; }
+.card .sub { margin: 0 0 6px; font-size: 12px; color: var(--muted); }
+.card svg { display: block; width: 100%; height: auto; overflow: visible; }
+.card svg text { fill: var(--muted); font-family: var(--mono); font-size: 10px; }
+.card .endlab { font-family: var(--sans); font-size: 10.5px; font-weight: 600; fill: var(--ink-2); }
+.tip { position: absolute; pointer-events: none; background: var(--panel); border: 1px solid var(--rule); border-radius: 6px; padding: 6px 8px; font-size: 12px; box-shadow: 0 4px 14px rgba(0,0,0,.12); white-space: nowrap; z-index: 2; }
+.tip b { font-family: var(--mono); font-weight: 500; }
+.empty { color: var(--muted); font-size: 12.5px; padding: 30px 0; text-align: center; }
+.note { color: var(--ink-2); font-size: 12.5px; max-width: 75ch; margin: 0; }
+details { background: var(--panel); border: 1px solid var(--rule); border-radius: 10px; padding: 10px 14px; }
+summary { cursor: pointer; font-weight: 600; font-size: 13.5px; }
+summary:focus-visible { outline: 2px solid var(--agentic); outline-offset: 2px; }
+.tablewrap { overflow-x: auto; margin-top: 10px; }
+table { border-collapse: collapse; font-size: 12.5px; }
+th, td { padding: 4px 12px 4px 0; text-align: right; border-bottom: 1px solid var(--grid); }
+th:first-child, td:first-child { text-align: left; }
+th { color: var(--ink-2); font-weight: 600; }
+@media (max-width: 560px) { .run-stat { min-width: 0; } .run { grid-template-columns: 14px minmax(0, 1fr) auto; } .track { grid-column: 2 / -1; grid-row: 2; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>RaR Rubric RL Runs</h1>
+    <div class="meta">Qwen3.5-4B, GRPO, judged by Qwen3.8-27B. Data from the training logs, generated <span id="gen" class="mono"></span>.</div>
+  </header>
+  <div class="runs" id="runs" aria-label="Run progress"></div>
+  <p class="note">Held-out validation is the comparison that counts: every arm is scored on the same 500 RaR val questions with the shipped rubric, and science also on GPQA-Diamond (198 questions, exact option letter). Training reward is scored with each arm's own rubric, so it is not comparable across arms. Training curves show a 10-step moving average.</p>
+  <div id="domains" style="display:grid;gap:28px"></div>
+</div>
+
+<script>
+window.__DATA__ = /*DATA*/null;
+(function () {
+  const D = window.__DATA__;
+  const ARM_LABEL = { agentic: "Agentic", baseline: "Baseline", shipped: "Shipped" };
+  const ARMS = ["agentic", "baseline", "shipped"];
+  const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+  const el = (t, a = {}, ...kids) => { const e = document.createElement(t); for (const k in a) e.setAttribute(k, a[k]); kids.forEach(c => e.append(c)); return e; };
+  const NS = "http://www.w3.org/2000/svg";
+  const sv = (t, a = {}) => { const e = document.createElementNS(NS, t); for (const k in a) e.setAttribute(k, a[k]); return e; };
+  if (!D) { document.getElementById("runs").textContent = "No data yet."; return; }
+  document.getElementById("gen").textContent = new Date(D.generated_at * 1000).toLocaleString();
+
+  // Run progress strip
+  const runsBox = document.getElementById("runs");
+  const queued = [["agentic","science"],["baseline","science"],["agentic","medicine"],["baseline","medicine"],["shipped","science"],["shipped","medicine"]];
+  queued.forEach(([arm, ds]) => {
+    const r = D.runs.find(x => x.arm === arm && x.dataset === ds);
+    const frac = r ? r.step / D.total_steps : 0;
+    let stat, chip = "";
+    if (!r) stat = "queued";
+    else if (r.step >= D.total_steps) { stat = `${r.step}/${D.total_steps}`; chip = '<span class="chip good">done</span>'; }
+    else {
+      const idle = (D.generated_at - r.log_mtime) > 1800;
+      stat = `${r.step}/${D.total_steps} · ${(100 * frac).toFixed(1)}%` + (r.eta_hours != null ? ` · ETA ${r.eta_hours.toFixed(1)} h` : " · starting");
+      if (idle) chip = '<span class="chip warn">log idle</span>';
+      if (r.attempts > 1) chip += `<span class="chip warn">${r.attempts - 1} restart${r.attempts > 2 ? "s" : ""}</span>`;
+    }
+    const row = el("div", { class: "run" });
+    const sw = el("span", { class: "swatch" }); sw.style.background = `var(--${arm})`;
+    const name = el("span", { class: "run-name" }); name.textContent = `${ARM_LABEL[arm]} · ${ds}`;
+    const track = el("div", { class: "track", role: "progressbar", "aria-valuemin": 0, "aria-valuemax": D.total_steps, "aria-valuenow": r ? r.step : 0 });
+    const fill = el("div", { class: "fill" }); fill.style.width = `${(100 * frac).toFixed(2)}%`; fill.style.background = `var(--${arm})`; track.append(fill);
+    const st = el("span", { class: "run-stat num" }); st.innerHTML = stat + chip;
+    row.append(sw, name, track, st); runsBox.append(row);
+  });
+
+  const movavg = (pts, w) => pts.map((p, i) => { const s = pts.slice(Math.max(0, i - w + 1), i + 1); return [p[0], s.reduce((a, b) => a + b[1], 0) / s.length]; });
+  const nice = (lo, hi) => { if (lo === hi) { lo -= 0.5; hi += 0.5; } const span = hi - lo, step = Math.pow(10, Math.floor(Math.log10(span / 4))); const m = [1, 2, 2.5, 5, 10].find(k => span / (k * step) <= 5) * step; const a = Math.floor(lo / m) * m, b = Math.ceil(hi / m) * m; const t = []; for (let v = a; v <= b + m / 2; v += m) t.push(+v.toFixed(6)); return t; };
+  const fmt = (v, d) => Math.abs(v) >= 1000 ? Math.round(v).toLocaleString() : v.toFixed(d);
+
+  function chart(card, series, opts) {
+    const W = 440, H = 190, m = { l: 44, r: 64, t: 8, b: 22 };
+    const all = series.flatMap(s => s.pts);
+    if (!all.length) { card.append(el("div", { class: "empty" }, "No data yet")); return; }
+    const xmax = Math.max(D.total_steps * (opts.fullX ? 1 : 0), ...all.map(p => p[0]), 10);
+    let ys = all.map(p => p[1]); let lo = Math.min(...ys), hi = Math.max(...ys);
+    if (opts.zero) lo = Math.min(0, lo);
+    if (opts.max1) hi = Math.max(hi, opts.max1);
+    const ticks = nice(lo, hi); lo = ticks[0]; hi = ticks[ticks.length - 1];
+    const X = x => m.l + (x / xmax) * (W - m.l - m.r), Y = y => m.t + (1 - (y - lo) / (hi - lo)) * (H - m.t - m.b);
+    const svg = sv("svg", { viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": opts.title });
+    ticks.forEach(t => { svg.append(sv("line", { x1: m.l, x2: W - m.r, y1: Y(t), y2: Y(t), stroke: css("--grid"), "stroke-width": 1 }));
+      const tx = sv("text", { x: m.l - 6, y: Y(t) + 3, "text-anchor": "end" }); tx.textContent = fmt(t, opts.dec); svg.append(tx); });
+    nice(0, xmax).filter(v => v <= xmax).forEach(v => { const tx = sv("text", { x: X(v), y: H - 6, "text-anchor": "middle" }); tx.textContent = v; svg.append(tx); });
+    svg.append(sv("line", { x1: m.l, x2: W - m.r, y1: H - m.b, y2: H - m.b, stroke: css("--rule"), "stroke-width": 1 }));
+    const ends = [];
+    series.forEach(s => {
+      if (!s.pts.length) return;
+      const col = css(`--${s.arm}`);
+      const d = s.pts.map((p, i) => `${i ? "L" : "M"}${X(p[0]).toFixed(1)},${Y(p[1]).toFixed(1)}`).join("");
+      svg.append(sv("path", { d, fill: "none", stroke: col, "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round" }));
+      if (opts.dots) s.pts.forEach(p => svg.append(sv("circle", { cx: X(p[0]), cy: Y(p[1]), r: 4, fill: col, stroke: css("--panel"), "stroke-width": 2 })));
+      const last = s.pts[s.pts.length - 1]; ends.push({ arm: s.arm, y: Y(last[1]), x: X(last[0]), v: last[1], col });
+    });
+    ends.sort((a, b) => a.y - b.y); for (let i = 1; i < ends.length; i++) if (ends[i].y - ends[i - 1].y < 12) ends[i].y = ends[i - 1].y + 12;
+    ends.forEach(e => { svg.append(sv("circle", { cx: e.x, cy: Y(e.v), r: 3.5, fill: e.col, stroke: css("--panel"), "stroke-width": 2 }));
+      const t = sv("text", { x: W - m.r + 8, y: e.y + 3.5, class: "endlab" }); t.textContent = `${ARM_LABEL[e.arm]} ${fmt(e.v, opts.dec)}`; svg.append(t); });
+    // hover crosshair
+    const cross = sv("line", { y1: m.t, y2: H - m.b, stroke: css("--muted"), "stroke-width": 1, "stroke-dasharray": "3 3", visibility: "hidden" });
+    svg.append(cross);
+    const hit = sv("rect", { x: m.l, y: m.t, width: W - m.l - m.r, height: H - m.t - m.b, fill: "transparent" }); svg.append(hit);
+    const tip = el("div", { class: "tip", hidden: "" }); card.append(svg, tip);
+    hit.addEventListener("mousemove", ev => {
+      const r = svg.getBoundingClientRect(); const sx = (ev.clientX - r.left) * W / r.width; const xv = (sx - m.l) / (W - m.l - m.r) * xmax;
+      let best = null; series.forEach(s => s.pts.forEach(p => { if (best === null || Math.abs(p[0] - xv) < Math.abs(best - xv)) best = p[0]; }));
+      if (best === null) return;
+      cross.setAttribute("x1", X(best)); cross.setAttribute("x2", X(best)); cross.setAttribute("visibility", "visible");
+      const rows = series.map(s => { const p = s.pts.find(q => q[0] === best); return p ? `<div><span class="swatch" style="display:inline-block;margin-right:6px;background:var(--${s.arm})"></span>${ARM_LABEL[s.arm]} <b>${fmt(p[1], opts.dec + 1)}</b></div>` : ""; }).join("");
+      tip.innerHTML = `<div style="color:var(--muted)">step ${best}</div>${rows}`; tip.hidden = false;
+      const cr = card.getBoundingClientRect(); let left = ev.clientX - cr.left + 12; if (left + 170 > cr.width) left = ev.clientX - cr.left - 170; tip.style.left = left + "px"; tip.style.top = (ev.clientY - cr.top - 10) + "px";
+    });
+    hit.addEventListener("mouseleave", () => { tip.hidden = true; cross.setAttribute("visibility", "hidden"); });
+  }
+
+  const box = document.getElementById("domains");
+  ["science", "medicine"].forEach(ds => {
+    const runs = ARMS.map(a => D.runs.find(r => r.arm === a && r.dataset === ds)).filter(Boolean);
+    const sec = el("section");
+    const head = el("div", { class: "section-head" });
+    const h = el("h2"); h.textContent = ds === "science" ? "RaR-Science" : "RaR-Medicine";
+    const lg = el("div", { class: "legend" });
+    ARMS.forEach(a => { const s = el("span"); const sw = el("span", { class: "swatch" }); sw.style.background = `var(--${a})`; s.append(sw, ARM_LABEL[a] + (runs.some(r => r.arm === a) ? "" : " (queued)")); lg.append(s); });
+    head.append(h, lg); sec.append(head);
+    if (!runs.length) { sec.append(el("p", { class: "note" }, "Queued. Starts after the science runs finish.")); box.append(sec); return; }
+    const grid = el("div", { class: "grid" });
+    const valSets = [...new Set(runs.flatMap(r => Object.keys(r.val)))].sort((a, b) => (a === "gpqa_diamond" ? -1 : 1) - (b === "gpqa_diamond" ? -1 : 1));
+    const VAL_TITLE = { gpqa_diamond: ["GPQA-Diamond accuracy", "Held-out, 198 questions, exact option letter. Chance is 0.25; unanswered counts as wrong."],
+      rar_science: ["RaR-Science val reward", "Held-out, 500 questions, shipped rubric for every arm"],
+      rar_medicine: ["RaR-Medicine val reward", "Held-out, 500 questions, shipped rubric for every arm"] };
+    const cards = [];
+    valSets.forEach(v => cards.push({ title: VAL_TITLE[v] ? VAL_TITLE[v][0] : v, sub: VAL_TITLE[v] ? VAL_TITLE[v][1] : "Held-out", series: runs.map(r => ({ arm: r.arm, pts: r.val[v] || [] })), dots: true, dec: 3 }));
+    const TR = [["clip_ratio", "Truncation rate", "Share of responses that hit the 3,584-token limit", 2],
+      ["resp_len", "Response length", "Mean tokens per response", 0],
+      ["entropy", "Policy entropy", "Collapse toward 0 means the policy stops exploring", 2],
+      ["kl_to_ref", "KL to reference model", "Low-variance KL estimate; a steady climb means drift", 2],
+      ["train_reward", "Training reward", "Each arm's own rubric; not comparable across arms", 2]];
+    TR.forEach(([k, t, s, d]) => cards.push({ title: t, sub: s + " · 10-step average", series: runs.map(r => ({ arm: r.arm, pts: movavg(r.train[k] || [], 10) })), dec: d, zero: k === "clip_ratio" || k === "kl_to_ref" }));
+    cards.forEach(c => { const card = el("div", { class: "card" }); const h3 = el("h3"); h3.textContent = c.title; const p = el("p", { class: "sub" }); p.textContent = c.sub; card.append(h3, p); grid.append(card); chart(card, c.series, { title: c.title, dots: c.dots, dec: c.dec, zero: c.zero }); });
+    sec.append(grid);
+    // table view of validation
+    const det = el("details"); const sm = el("summary"); sm.textContent = "Validation table"; det.append(sm);
+    const tw = el("div", { class: "tablewrap" }); const tb = el("table");
+    const hr = el("tr"); hr.append(el("th", {}, "Step")); valSets.forEach(v => runs.forEach(r => hr.append(el("th", {}, `${v} · ${ARM_LABEL[r.arm]}`)))); tb.append(hr);
+    const steps = [...new Set(runs.flatMap(r => Object.values(r.val).flatMap(s => s.map(p => p[0]))))].sort((a, b) => a - b);
+    steps.forEach(s => { const tr = el("tr"); tr.append(el("td", { class: "num" }, String(s))); valSets.forEach(v => runs.forEach(r => { const p = (r.val[v] || []).find(q => q[0] === s); tr.append(el("td", { class: "num" }, p ? p[1].toFixed(3) : "")); })); tb.append(tr); });
+    tw.append(tb); det.append(tw); sec.append(det);
+    box.append(sec);
+  });
+})();
+</script>
